@@ -6,25 +6,24 @@ import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Start logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-logging.basicConfig(level=logging.WARNING)
-
 # Java imports
 import jpype
 import jpype.imports
 from jpype.types import JObject
 if not jpype.isJVMStarted():
-    jpype.startJVM(classpath = ['jars/*'])
+    jpype.startJVM(classpath=['jars/*'])
 
-from loci.formats import IFormatReader, ChannelSeparator, ImageReader  # type: ignore
+from loci.formats import ImageReader  # type: ignore
 from ome.xml.meta import MetadataRetrieve  # type: ignore
 from loci.common.services import ServiceFactory  # type: ignore
 from loci.formats.services import OMEXMLService  # type: ignore
-from loci.formats.in_ import DynamicMetadataOptions  # type: ignore
 from loci.common import DebugTools  # type: ignore
 DebugTools.enableLogging("Error")
+
+# Start logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 
 
 class BioFormatsReader:
@@ -67,7 +66,7 @@ class BioFormatsReader:
     @property
     def pixel_dtype(self):
         return self._pixel_dtypes[self._metadata.getPixelsType(0).toString()]
-    
+
     @property
     def size_X(self):
         return self._rdr.getSizeX()
@@ -89,7 +88,7 @@ class BioFormatsReader:
             The Z index, by default 0.
         t : int, optional
             The T index, by default 0.
-        XYWH : 
+        XYWH :
             Read a section of the image
 
         Returns
@@ -112,8 +111,6 @@ class BioFormatsReader:
             img = np.array(byte_array, dtype=dtype).reshape(shape)
 
         return img
-
-print('done')
 
 
 def main():
