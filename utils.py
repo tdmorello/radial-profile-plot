@@ -6,6 +6,9 @@ import pathlib
 import numpy as np
 import matplotlib.pyplot as plt
 
+from skimage.exposure import equalize_hist
+from skimage.color import gray2rgb
+
 # Java imports
 import jpype
 import jpype.imports
@@ -111,6 +114,13 @@ class BioFormatsReader:
             img = np.array(byte_array, dtype=dtype).reshape(shape)
 
         return img
+
+
+def apply_color_lut(image, color: str, do_equalize_hist=True):
+    multiplier = {'red': [1, 0, 0], 'green': [0, 1, 0], 'blue': [0, 0, 1]}
+    if do_equalize_hist:
+        image = (equalize_hist(image) * 200).astype(np.uint8)
+    return gray2rgb(image) * multiplier[color]
 
 
 def main():
