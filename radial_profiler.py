@@ -1,10 +1,8 @@
 
 # from matplotlib import colors
 import numpy as np
-from skimage.morphology import binary_dilation, disk
-from scipy import ndimage
-from skimage.measure import find_contours
 import matplotlib.gridspec as gridspec
+import cv2
 
 from utils import apply_color_lut
 import matplotlib.pyplot as plt
@@ -55,11 +53,12 @@ class RadialProfiler:
 
     @property
     def dilated_mask(self):
-        return binary_dilation(self.mask, disk(self.dilation))
+        selem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*self.dilation-1, 2*self.dilation-1))
+        return cv2.dilate(self.mask, selem, iterations=1)
 
     @property
     def distance_map(self):
-        return ndimage.distance_transform_edt(self.dilated_mask)
+        return cv2.distanceTransform(self.dilated_mask, cv2.DIST_L2, 5)
 
     @property
     def distance_map_max(self):
@@ -71,7 +70,9 @@ class RadialProfiler:
 
     @property
     def rings(self):
-        return [find_contours(self.distance_map, lev) for lev in self.levels]
+        thresholds = [thr.astype('uint8') for thr in [self.distance_map > lev for lev in self.levels]]
+        contours = [cv2.findContours(thr, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0] for thr in thresholds]
+        return contours
 
     def get_profiles(self) -> np.array:
         img = self.img
@@ -150,7 +151,7 @@ class RadialProfilePlotter(RadialProfiler):
 
             # Middle contour (corresponding to mask outline before dilation)
             c = contours[int(len(contours) / 2)][0]
-            line = ax.plot(c[:, 1], c[:, 0], linewidth=1, c='white', alpha=1)
+            line = ax.plot(c[..., 0][0], c[..., 1][0], linewidth=1, c='white', alpha=1)
             line[0].set_dashes((4, 6))
             ax.text(0.02, 0.05, title, transform=ax.transAxes, c='white')
             ax.axis('off')
@@ -216,16 +217,18 @@ def main():
     # for prof in profiles:
     #     ax.plot(np.flip(prof))
 
-    # plt.show()
     colors = ['red', 'green', 'blue']
     titles = ['1', '2', '3']
-    profile_plotter = RadialProfilePlotter(img,
+    plotter = RadialProfilePlotter(img,
                                            cell_mask,
                                            30,
                                            30,
                                            colors,
                                            titles)
-    profile_plotter.plot()
+    plotter.plot()
+    plt.show()
+    
+    # plot = get_radial_profiles(img, cell_mask, 30, 30)
 
 
 if __name__ == '__main__':
