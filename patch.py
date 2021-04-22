@@ -12,27 +12,41 @@ def reposition_shape(shape, center):
 class Patch:
     """A class to hold an image patch and its corresponding object mask
     """
-    def __init__(self, img: np.array, shape: Polygon, id: int = None):
-        self.img = img
-        self.shape = shape
-        self.id = id
+    def __init__(self, img: np.array, polygon: Polygon, id: int = None):
+        # assert isinstance(polygon, Polygon)
+
+        self._img = img
+        self._polygon = polygon
+        self._id = id
 
     @property
     def size(self):
-        return self.img.shape[0]
+        return self._img.shape[0]
 
     @property
-    def mask(self):
-        shape = reposition_shape(self.shape, self.size/2)
-        return 1 - rasterize([shape], (self.size, self.size))
+    def id(self):
+        return self._id
+
+    @property
+    def polygon(self):
+        return self._polygon
+
+    def get_image(self):
+        return self._img
 
     def get_outline(self):
-        shape = reposition_shape(self.shape, self.size/2)
+        shape = reposition_shape(self._polygon, self.size/2)
         return shape.exterior.xy
 
+    def get_mask(self):
+        shape = reposition_shape(self._polygon, self.size/2)
+        return rasterize([shape], (self.size, self.size))
+
     def get_masked_image(self):
-        img = self.img
-        mask = self.mask
+        img = self.get_image()
+        mask = self.get_mask()
+        if len(img.shape) == 3:
+            mask = np.repeat(mask[..., np.newaxis], img.shape[2], axis=2)
         return np.ma.masked_array(img, mask, fill_value=0)
 
 
@@ -63,12 +77,11 @@ def main():
     W, H = patchsize, patchsize
     XYWH = [X, Y, W, H]
 
-    img = reader.read_image(0, XYWH=XYWH)
+    img = reader.read(XYWH=XYWH)
     patch = Patch(img, shape)
-    # plt.imshow(patch.masked_image().filled())
-    x, y = patch.get_outline()
-    plt.imshow(patch.img)
-    plt.plot(*patch.get_outline(), c='red')
+    plt.imshow(patch.get_masked_image().filled())
+    # plt.imshow(patch.get_image())
+    # plt.plot(*patch.get_outline(), c='red')
 
 
 if __name__ == '__main__':
