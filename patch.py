@@ -1,8 +1,8 @@
 
+import numpy as np
 from rasterio.features import rasterize
 from shapely.affinity import translate
 from shapely.geometry import Polygon
-import numpy as np
 
 
 def reposition_shape(shape, center):
@@ -51,9 +51,10 @@ class Patch:
 
 
 def main():
-    import matplotlib.pyplot as plt
     import geojson
+    import matplotlib.pyplot as plt
     from shapely.geometry import shape as shapely_shape
+
     from utils import BioFormatsReader
 
     patchsize = 500
