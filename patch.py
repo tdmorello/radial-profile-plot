@@ -6,13 +6,16 @@ from shapely.geometry import Polygon
 
 
 def reposition_shape(shape, center):
-    return translate(shape, -shape.centroid.x + center, -shape.centroid.y + center)  # noqa
+    return translate(shape, -shape.centroid.x + center, -shape.centroid.y + center)
 
 
 class Patch:
     """A class to hold an image patch and its corresponding object mask
     """
-    def __init__(self, img: np.array, polygon: Polygon, id: int = None):
+    def __init__(self,
+                 img: np.ndarray,
+                 polygon: Polygon,
+                 id: int = None):
         # assert isinstance(polygon, Polygon)
 
         self._img = img
@@ -55,7 +58,7 @@ def main():
     import matplotlib.pyplot as plt
     from shapely.geometry import shape as shapely_shape
 
-    from utils import BioFormatsReader
+    from bioformatsreader import BioFormatsReader
 
     patchsize = 500
     json_fname = r'data/b32f-sag_L-lxn_pv-w03_2-027-cla-63x-a_overview-core_lxn_detections.json'  # noqa
@@ -73,13 +76,13 @@ def main():
     shape = allshapes[idx]
 
     # Get coordinates for image
-    X = int(shape.centroid.x - patchsize / 2)
-    Y = int(shape.centroid.y - patchsize / 2)
+    X, Y = [int(coord - patchsize / 2) for coord in shape.centroid.xy]
+    # Y = int(shape.centroid.y - patchsize / 2)
     W, H = patchsize, patchsize
     XYWH = [X, Y, W, H]
 
     img = reader.read(XYWH=XYWH)
-    patch = Patch(img, shape)
+    patch = Patch(img, shape)  # type: ignore
     plt.imshow(patch.get_masked_image().filled())
     # plt.imshow(patch.get_image())
     # plt.plot(*patch.get_outline(), c='red')
