@@ -1,17 +1,18 @@
 
 # from matplotlib import colors
-import numpy as np
-import matplotlib.gridspec as gridspec
 import cv2
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import numpy as np
 
 from utils import apply_color_lut
-import matplotlib.pyplot as plt
 
 # TODO normalizing function
+# TODO fit least squares circle to outlines to estimate distance to centroid
 
 
-def get_radial_profiles(img: np.array,
-                        mask: np.array,
+def get_radial_profiles(img: np.ndarray,
+                        mask: np.ndarray,
                         dilation: int,
                         bins: int):
     """Convenience function for creating radial profile
@@ -30,8 +31,8 @@ def get_radial_profiles(img: np.array,
 
 class RadialProfiler:
     def __init__(self,
-                 img: np.array,
-                 mask: np.array,
+                 img: np.ndarray,
+                 mask: np.ndarray,
                  dilation: int,
                  bins: int):
         """Create radial profile curve for an image
@@ -72,9 +73,10 @@ class RadialProfiler:
     def rings(self):
         thresholds = [thr.astype('uint8') for thr in [self.distance_map > lev for lev in self.levels]]
         contours = [cv2.findContours(thr, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0] for thr in thresholds]
+        # contours = [cont.reshape(cont.shape[0], cont.shape[2]) for cont in contours]
         return contours
 
-    def get_profiles(self) -> np.array:
+    def get_profiles(self, norm_func=None) -> np.ndarray:
         img = self.img
         bins = self.bins
         dist_map = self.distance_map
@@ -102,35 +104,22 @@ class RadialProfiler:
 
 class RadialProfilePlotter(RadialProfiler):
     def __init__(self,
-                 img: np.array,
-                 mask: np.array,
+                 img: np.ndarray,
+                 mask: np.ndarray,
                  dilation: int,
                  bins: int,
-                 colors,
-                 titles,
                  ):
         super().__init__(img, mask, dilation, bins)
 
-        self.colors = colors
-        self.titles = titles
-
-    # @property
-    # def colors(self):
-    #     pass
-
-    # @property
-    # def titles(self):
-    #     pass
-
     def plot(self,
+             colors=['red', 'green', 'blue'],
+             titles=['1', '2', '3'],
              show_cell_boundary: bool = True,
              show_fig: bool = True,
              save_fig: bool = False,
              fname=None):
 
         contours = self.rings
-        titles = self.titles
-        colors = self.colors
 
         fig = plt.figure(constrained_layout=False)
         spec = gridspec.GridSpec(ncols=4, nrows=3, figure=fig, wspace=0)
@@ -175,7 +164,7 @@ class RadialProfilePlotter(RadialProfiler):
                 linestyle='--',
                 color='black')
             ax_plot.annotate(
-                'cell boundary',
+                'approximate\ncell boundary',
                 xy=xy, xycoords=("data", "axes fraction"),
                 xytext=xytext, textcoords=("data", "axes fraction"),
                 arrowprops=dict(arrowstyle='->'))
@@ -183,8 +172,6 @@ class RadialProfilePlotter(RadialProfiler):
         ax_plot.set_title('Radial profile plot')
         ax_plot.set_xlabel('Distance from cell center')
         ax_plot.set_xticks([])
-        # ax_plot.set_ylim(top=1.8)
-        # ax_plot.set_yticks([])
         ax_plot.set_ylabel('Normalized intensity')
         ax_plot.legend()
 
@@ -198,6 +185,7 @@ class RadialProfilePlotter(RadialProfiler):
 
 def main():
     from skimage.io import imread
+
     # import matplotlib.pyplot as plt
 
     cell_red = imread('data/surround_cell_RhRX.tif')
@@ -214,20 +202,17 @@ def main():
     # # profiler = RadialProfiler(img, cell_mask, 30, 30)
     # # profiles = profiler.get_profiles()
     # profiles = get_radial_profiles(img, cell_mask, 30, 30)
+    # print(profiles)
+
     # for prof in profiles:
     #     ax.plot(np.flip(prof))
 
     colors = ['red', 'green', 'blue']
-    titles = ['1', '2', '3']
-    plotter = RadialProfilePlotter(img,
-                                           cell_mask,
-                                           30,
-                                           30,
-                                           colors,
-                                           titles)
-    plotter.plot()
+    titles = ['PV', 'LXN', 'DAPI']
+    plotter = RadialProfilePlotter(img, cell_mask, 30, 30)
+    plotter.plot(colors, titles)
     plt.show()
-    
+
     # plot = get_radial_profiles(img, cell_mask, 30, 30)
 
 
