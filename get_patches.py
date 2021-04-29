@@ -141,7 +141,7 @@ if __name__ == '__main__':
             avg_dist_to_center = spatial.distance.cdist(contour, centroid[np.newaxis]).mean()
             nBins = int(avg_dist_to_center / 1)
             # profiler.bins = nBins
-            profs= profiler.get_profiles()
+            profs = profiler.get_profiles()
             # profiler.plot()
 
             # profs, locs = get_radial_profiles(p.get_image(), p.get_mask(), 30, 60)
@@ -180,12 +180,22 @@ if __name__ == '__main__':
         emp[0:prof.size][:, 0] = prof
         profs_extended.append(emp)
     df['profiles_ext'] = profs_extended
+    
+    profs_flipped = []
+    for prof in df['profiles']:
+        profs_flipped.append(np.flip(prof))
+    df['profs_flipped'] = profs_flipped
+
+    profs_flipped_norm = []
+    for prof in df['profs_flipped']:
+        profs_flipped_norm.append(prof / np.mean(prof, axis=0))
+    df['profs_flipped_norm'] = profs_flipped_norm
 
     for titl, color in zip(titles, colors):
         # profs = df[df['plot_key'] == titl]['profiles'].to_numpy()
         # profs = df[df['plot_key'] == titl]['profiles_ext'].to_numpy()
-        profs = df[df['plot_key'] == titl]['profiles'].to_numpy()
-        profs = np.flip(profs)
+        profs = df[df['plot_key'] == titl]['profs_flipped'].to_numpy()
+
         avg = np.mean(profs, axis=0)
         X = np.arange(0, avg.size)
         std_dev = np.std(profs, axis=0)
@@ -197,7 +207,7 @@ if __name__ == '__main__':
         plt.xlabel('Distance from cell center')
         plt.ylabel('Intensity')
         # plt.errorbar(X, avg, std_dev, c=color)
-        plt.fill_between(X, upper_err[0], lower_err[0], color=color, alpha=0.1)
+        plt.fill_between(X, upper_err, lower_err, color=color, alpha=0.1)
         img_fname = Path('/Users/tim/Desktop') / (Path(detection_file).stem + '_plot.png')
         plt.savefig(img_fname)
 
