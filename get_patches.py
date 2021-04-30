@@ -134,15 +134,13 @@ if __name__ == '__main__':
         # Process this batch
         for p in tqdm(patches, desc='Extracting radial profiles', leave=False):
             # # Keep plots identifiable by their keys
-            profiler = RadialProfilePlotter(p.get_image(), p.get_mask(), 30, 50)
+            profiler = RadialProfilePlotter(p.get_image(), p.get_mask(), 30, 100)
             contour = cv2.findContours(profiler.dilated_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0][0]
             contour = contour.reshape(contour.shape[0], contour.shape[2])
             centroid = np.array([int(patch_size / 2)]*2)
             avg_dist_to_center = spatial.distance.cdist(contour, centroid[np.newaxis]).mean()
             nBins = int(avg_dist_to_center / 1)
-            # profiler.bins = nBins
             profs, dists = profiler.get_profiles()
-            # profiler.plot()
 
             # profs, locs = get_radial_profiles(p.get_image(), p.get_mask(), 30, 60)
 
@@ -172,19 +170,22 @@ if __name__ == '__main__':
 
     df = pd.DataFrame({'plot_key': df_plot_keys, 'profiles': df_profiles, 'distance': df_distances}, index=df_ids)
 
-    max_arr_length = np.max([prof.shape for prof in df['profiles']])
+    # max_arr_length = np.max([prof.shape for prof in df['profiles']])
 
-    # Match lengths of all profile arrays
-    profs_extended = []
-    for prof in df['profiles']:
-        emp = np.empty((max_arr_length, 1))
-        emp[:] = np.nan
-        emp[0:prof.size][:, 0] = prof
-        profs_extended.append(emp)
-    df['profiles_ext'] = profs_extended
+    # # Match lengths of all profile arrays
+    # profs_extended = []
+    # for prof in df['profiles']:
+    #     emp = np.empty((max_arr_length, 1))
+    #     emp[:] = np.nan
+    #     emp[0:prof.size][:, 0] = prof
+    #     profs_extended.append(emp)
+    # df['profiles_ext'] = profs_extended
 
     fig, ax = plt.subplots()
+    twin_axes = {}
+    
     for titl, color in zip(titles, colors):
+        twin_axes[titl] = ax.twinx()
         profs = df[df['plot_key'] == titl]['profiles'].to_numpy()
         dists = df[df['plot_key'] == titl]['distance'].to_numpy()
         
@@ -195,7 +196,8 @@ if __name__ == '__main__':
         
         # profs = df[df['plot_key'] == titl]['profs_flipped'].to_numpy()
         for dist, prof in zip(dists, profs):
-            ax.plot(dist, prof, c=color, alpha=0.2)
+            twin_axes[titl].plot(dist, prof, c=color, alpha=0.1)
+            # ax.plot(dist, prof, c=color, alpha=0.2)
 
         # avg = np.mean(profs, axis=0)
         # X = np.arange(0, avg.size)
