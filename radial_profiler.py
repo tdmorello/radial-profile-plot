@@ -12,7 +12,6 @@ from typing import Tuple
 from utils import apply_color_lut
 
 # TODO normalizing function
-# TODO fit least squares circle to outlines to estimate distance to centroid
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +120,7 @@ class RadialProfiler:
             # add profile to channels
             profiles[ch] = values
 
-        distances = levels - self.distance_map_cell_min
+        distances = self.distance_map_cell_min - levels
 
         return profiles, distances
 
