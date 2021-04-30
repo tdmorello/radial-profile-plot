@@ -8,6 +8,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 
+from typing import Tuple
 from utils import apply_color_lut
 
 # TODO normalizing function
@@ -71,35 +72,46 @@ class RadialProfiler:
         return np.max(self.distance_map)
 
     @property
+    def distance_map_cell_min(self):
+        masked_distance = np.ma.masked_array(self.distance_map, 1 - self.mask.astype(bool))
+        return np.min(masked_distance)
+
+    # @property
+    # def levels(self):
+    #     return np.linspace(0, self.distance_map_max, self.bins)
+
+    @property
     def levels(self):
-        return np.linspace(0, self.distance_map_max, self.bins)
+        """Find a constant number of bins between dilated mask boundary and cell boundary. Use the calculated step size
+        to build rings inside the cell until the center is reached"""
+        dist_cell_min = self.distance_map_cell_min
+        outer_levels, step = np.linspace(0, dist_cell_min, 15, retstep=True)
+        inner_levels = np.arange(dist_cell_min, self.distance_map_max, step)[1:]
+        levels = np.concatenate([outer_levels, inner_levels])
+        return levels
 
     @property
     def rings(self):
         thresholds = [thr.astype('uint8') for thr in [self.distance_map > lev for lev in self.levels]]
-        # TODO use numpy.squeeze to fix dimensions of `contours` output
         contours = [cv2.findContours(thr, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)[0] for thr in thresholds]
+        # contours = [cont.reshape(cont.shape[0], cont.shape[2]) for cont in contours]
         return contours
 
-    def get_profiles(self, norm_func: Optional[Callable] = None) -> np.ndarray:
+    def get_profiles(self, norm_func=None) -> Tuple[np.ndarray, np.ndarray]:
+        """Returns profiles and distances from the cell boundary"""
         img = self.img
-        bins = self.bins
         dist_map = self.distance_map
         levels = self.levels
-        cell_area = self.mask.sum()
+        total_bins = levels.size
 
-        profiles = np.zeros((img.shape[2], bins - 1))
-        loc = np.ones(bins - 1)
-
+        profiles = np.zeros((img.shape[2], total_bins - 1))
         # iterate over each image channel
         for ch in range(img.shape[2]):
-            values = np.zeros(bins - 1)
+            values = np.zeros(total_bins - 1)
             # iterate over areas between rings, from in to out
-            for i in range(bins - 1):
+            for i in range(total_bins - 1):
                 # create mask outside space between rings
-                area_mask = (dist_map > levels[i]) == (dist_map > levels[i + 1])
-                if (dist_map > levels[i]).sum() > cell_area:
-                    loc[i] *= -1
+                area_mask = (dist_map > levels[i]) == (dist_map > levels[i + 1])  # noqa
                 # find area of the space between rings
                 area = (area_mask == False).sum()  # noqa
                 # create a mask over the image channel
@@ -109,11 +121,9 @@ class RadialProfiler:
             # add profile to channels
             profiles[ch] = values
 
-        if norm_func is not None:
-            logger.warning('norm_func is not yet implemented')
-            return profiles, loc
+        distances = levels - self.distance_map_cell_min
 
-        return profiles, loc
+        return profiles, distances
 
 
 class RadialProfilePlotter(RadialProfiler):
@@ -148,7 +158,7 @@ class RadialProfilePlotter(RadialProfiler):
         images = [self.img[..., i] for i in range(self.img.shape[-1])]
 
         # Plot
-        for ax, img, title, color in zip(axs_patch, images, titles, colors):
+        for ax, img, title, color in zip(axs_patch, images, titles, colors):  # noqa
             img = apply_color_lut(img, color)
             ax.imshow(img)
 
@@ -159,12 +169,12 @@ class RadialProfilePlotter(RadialProfiler):
             ax.text(0.02, 0.05, title, transform=ax.transAxes, c='white')
             ax.axis('off')
 
-        cell_boundary_line = int(len(contours) / 2)
+        cell_boundary_line = 0
 
         all_plots = {}
-        profiles = self.get_profiles()
+        profiles, distances = self.get_profiles()
         for prof, img, title, color in zip(profiles, images, titles, colors):
-            ax_plot.plot(np.flip(prof), c=color, label=title)
+            ax_plot.plot(distances[:-1], np.flip(prof), c=color, label=title)
             all_plots[title] = prof
 
         if show_cell_boundary:
@@ -178,7 +188,7 @@ class RadialProfilePlotter(RadialProfiler):
                 linestyle='--',
                 color='black')
             ax_plot.annotate(
-                'approximate\ncell boundary',
+                'cell boundary',
                 xy=xy, xycoords=("data", "axes fraction"),
                 xytext=xytext, textcoords=("data", "axes fraction"),
                 arrowprops=dict(arrowstyle='->'))
@@ -215,7 +225,7 @@ def main():
     # fig, ax = plt.subplots(1, 1)
     # # profiler = RadialProfiler(img, cell_mask, 30, 30)
     # # profiles = profiler.get_profiles()
-    # profiles = get_radial_profiles(img, cell_mask, 30, 30)
+    # profiles = get_radial_profiles(img, cell_mask, 30, 10)
     # print(profiles)
 
     # for prof in profiles:
@@ -223,7 +233,7 @@ def main():
 
     colors = ['red', 'green', 'blue']
     titles = ['PV', 'LXN', 'DAPI']
-    plotter = RadialProfilePlotter(img, cell_mask, 30, 60)
+    plotter = RadialProfilePlotter(img, cell_mask, 30, 15)
     plotter.plot(colors, titles)
     plt.show()
 

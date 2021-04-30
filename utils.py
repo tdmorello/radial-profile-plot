@@ -1,24 +1,13 @@
-# Standard library imports
+
 import logging
-import pathlib
+from typing import Tuple
 
-# Third-party imports
 import numpy as np
-import matplotlib.pyplot as plt
+from scipy import optimize
+from skimage.color import gray2rgb
+# import matplotlib.pyplot as plt
+from skimage.exposure import equalize_hist
 
-# Java imports
-import jpype
-import jpype.imports
-from jpype.types import JObject
-if not jpype.isJVMStarted():
-    jpype.startJVM(classpath=['jars/*'])
-
-from loci.formats import ImageReader  # type: ignore
-from ome.xml.meta import MetadataRetrieve  # type: ignore
-from loci.common.services import ServiceFactory  # type: ignore
-from loci.formats.services import OMEXMLService  # type: ignore
-from loci.common import DebugTools  # type: ignore
-DebugTools.enableLogging("Error")
 
 # Start logger
 logger = logging.getLogger(__name__)
@@ -26,99 +15,81 @@ logger.setLevel(logging.DEBUG)
 logging.basicConfig(level=logging.WARNING)
 
 
-class BioFormatsReader:
-    '''Bio-Formats ImageReader class with some added functionality to work
-    with data in native Python
-    '''
+def apply_color_lut(image, color: str, do_equalize_hist=True):
+    multiplier = {'red': [1, 0, 0], 'green': [0, 1, 0], 'blue': [0, 0, 1]}
+    if do_equalize_hist:
+        image = (equalize_hist(image) * 200).astype(np.uint8)
+    return gray2rgb(image) * multiplier[color]
 
-    _pixel_dtypes = {
-        'int8': np.dtype(np.uint8),
-        'uint8': np.dtype(np.uint8),
-        'uint16': np.dtype(np.uint16),
-    }
 
-    def __init__(self, filepath, autostitch=True):
-        '''Initialize the Reader object.
+def to_color(image, color: str, do_equalize_hist=True):
+    multiplier = {'red': [1, 0, 0], 'green': [0, 1, 0], 'blue': [0, 0, 1]}
+    if do_equalize_hist:
+        image = (equalize_hist(image) * 200).astype(np.uint8)
+    return gray2rgb(image) * multiplier[color]
 
-        Parameters
-        ----------
-        filepath : string or path-like object
-            Path to an image file.
-        '''
-        self._filepath = pathlib.Path(filepath)
-        self._rdr = None
-        self._metadata = None
 
-        self._init_reader()
+def fit_circle(X: np.ndarray,
+               Y: np.ndarray,
+               center_estimate: Tuple[np.number, np.number]):
+    return CircleFitter(X, Y, center_estimate).fit()
 
-    def _init_reader(self) -> None:
-        factory = ServiceFactory()
-        service = JObject(factory.getInstance(OMEXMLService), OMEXMLService)
-        metadata = service.createOMEXMLMetadata()
 
-        self._rdr = ImageReader()
-        self._rdr.setMetadataStore(metadata)
+class CircleFitter:
+    """Fit a circle using scipy least squares method
 
-        logger.debug("Opening '%s'", str(self._filepath))
-        self._rdr.setId(str(self._filepath))
-        self._metadata = JObject(metadata, MetadataRetrieve)
+    https://scipy-cookbook.readthedocs.io/items/Least_Squares_Circle.html
+    """
 
-    @property
-    def pixel_dtype(self):
-        return self._pixel_dtypes[self._metadata.getPixelsType(0).toString()]
+    def __init__(self,
+                 X: np.ndarray,
+                 Y: np.ndarray,
+                 center_estimate: Tuple[np.number, np.number]):
+        self.X = X
+        self.Y = Y
+        self.center_estimate = center_estimate
 
-    @property
-    def size_X(self):
-        return self._rdr.getSizeX()
+    def calc_R(self, xc: float, yc: float):
+        """ calculate the distance of each data points from the center (xc, yc) """
+        return np.sqrt((self.X - xc)**2 + (self.Y - yc)**2)
 
-    @property
-    def size_Y(self):
-        return self._rdr.getSizeY()
+    def f_2(self, c: Tuple[float, float]):
+        """ calculate the algebraic distance between the 2D points and the mean circle centered at c=(xc, yc) """
+        Ri = self.calc_R(*c)
+        return Ri - Ri.mean()
 
-    def read_image(self, c: int, series: int=0, z: int=0, t: int=0, XYWH=None):  # noqa
-        '''Read bytes to numpy array
+    def Df_2(self, c: Tuple[float, float]):
+        """ Jacobian of f_2b
+        The axis corresponding to derivatives must be coherent with the col_deriv option of leastsq
+        """
+        xc, yc = c
+        df2b_dc = np.empty((len(c), self.X.size))
 
-        Parameters
-        ----------
-        c : int
-            The channel index.
-        series : int, optional
-            The series index, by default 0.
-        z : int, optional
-            The Z index, by default 0.
-        t : int, optional
-            The T index, by default 0.
-        XYWH :
-            Read a section of the image
+        Ri = self.calc_R(xc, yc)
+        df2b_dc[0] = (xc - self.X)/Ri  # dR/dxc
+        df2b_dc[1] = (yc - self.Y)/Ri  # dR/dyc
+        df2b_dc = df2b_dc - df2b_dc.mean(axis=1)[:, np.newaxis]
 
-        Returns
-        -------
-        ndarray
-            A numpy array representation of a single image.
-        '''
+        return df2b_dc.T
 
-        self._rdr.setSeries(series)
-        index = self._rdr.getIndex(z, c, t)
-        dtype = self.pixel_dtype
+    def fit(self):
+        center_estimate = self.center_estimate  # get centroid from shapely
+        results = optimize.least_squares(self.f_2, center_estimate, jac=self.Df_2)
+        center_2b = results.x
 
-        if XYWH is not None:
-            byte_array = self._rdr.openBytes(index, *XYWH)
-            shape = XYWH[3], XYWH[2]
-            img = np.array(byte_array, dtype=dtype).reshape(shape)
-        else:
-            byte_array = self._rdr.openBytes(index)
-            shape = self._rdr.getSizeY(), self._rdr.getSizeX()
-            img = np.array(byte_array, dtype=dtype).reshape(shape)
-
-        return img
+        Ri_2b = self.calc_R(*center_2b)
+        R_2b = Ri_2b.mean()
+        # residu_2b = sum((Ri_2b - R_2b)**2)
+        return center_2b, R_2b
 
 
 def main():
-    filepath = 'data/b32f-sag_L-lxn_pv-w03_2-cla-63x-proc.czi'
-    reader = BioFormatsReader(filepath)
-    XYWH = (5000, 5000, 150, 200)
-    img = reader.read_image(0, XYWH=XYWH)
-    plt.imshow(img)
+    X = np.array([9, 35, -13, 10, 23, 0])
+    Y = np.array([34, 10, 6, -14, 27, -10])
+    x_m, y_m = X.mean(), Y.mean()
+    fitter = CircleFitter(X, Y, (x_m, y_m))
+
+    print(fitter.fit())
 
 
 if __name__ == "__main__":

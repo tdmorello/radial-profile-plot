@@ -7,8 +7,7 @@ from typing import Union
 import numpy as np
 from rasterio.features import rasterize
 from shapely.affinity import translate
-from shapely.geometry import (GeometryCollection, LineString, MultiLineString,
-                              MultiPoint, MultiPolygon, Point, Polygon)
+from shapely.geometry import Polygon
 
 
 def reposition_shape(shape, center):
@@ -16,13 +15,11 @@ def reposition_shape(shape, center):
 
 
 class Patch:
-    """
-    A class to hold an image patch and its corresponding object mask
+    """A class to hold an image patch and its corresponding object mask
     """
     def __init__(self,
                  img: np.ndarray,
-                 polygon: Union[Point, MultiPoint, LineString, MultiLineString,
-                                Polygon, MultiPolygon, GeometryCollection],
+                 polygon: Polygon,
                  id: int = None):
         # assert isinstance(polygon, Polygon)
 
