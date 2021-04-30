@@ -141,7 +141,7 @@ if __name__ == '__main__':
             avg_dist_to_center = spatial.distance.cdist(contour, centroid[np.newaxis]).mean()
             nBins = int(avg_dist_to_center / 1)
             # profiler.bins = nBins
-            profs = profiler.get_profiles()
+            profs, dists = profiler.get_profiles()
             # profiler.plot()
 
             # profs, locs = get_radial_profiles(p.get_image(), p.get_mask(), 30, 60)
@@ -151,24 +151,26 @@ if __name__ == '__main__':
             #     profs[i] = profs[i] / np.nanmean(profs[i])
 
             profs_dict = {}
+            profs_dict['distance'] = dists[:-1]
             for ch, titl in enumerate(titles):
                 profs_dict[titl] = profs[ch]
-            # profs_dict['locs'] = locs
             profile_plots[p.id] = profs_dict
     logger.info('Processed %d detections', detection_count)
 
     df_ids = []
     df_plot_keys = []
     df_profiles = []
+    df_distances = []
     df_locs = []
     # Format for pandas dataframe
     for id_, profiles in profile_plots.items():
-        for titl, arr in profiles.items():
+        for key, value in profiles.items():
             df_ids.append(id_)
-            df_plot_keys.append(titl)
-            df_profiles.append(arr)
+            df_distances.append(profiles['distance'])
+            df_plot_keys.append(key)
+            df_profiles.append(value)
 
-    df = pd.DataFrame({'plot_key': df_plot_keys, 'profiles': df_profiles}, index=df_ids)
+    df = pd.DataFrame({'plot_key': df_plot_keys, 'profiles': df_profiles, 'distance': df_distances}, index=df_ids)
 
     max_arr_length = np.max([prof.shape for prof in df['profiles']])
 
@@ -180,35 +182,34 @@ if __name__ == '__main__':
         emp[0:prof.size][:, 0] = prof
         profs_extended.append(emp)
     df['profiles_ext'] = profs_extended
-    
-    profs_flipped = []
-    for prof in df['profiles']:
-        profs_flipped.append(np.flip(prof))
-    df['profs_flipped'] = profs_flipped
 
-    profs_flipped_norm = []
-    for prof in df['profs_flipped']:
-        profs_flipped_norm.append(prof / np.mean(prof, axis=0))
-    df['profs_flipped_norm'] = profs_flipped_norm
-
+    fig, ax = plt.subplots()
     for titl, color in zip(titles, colors):
-        # profs = df[df['plot_key'] == titl]['profiles'].to_numpy()
-        # profs = df[df['plot_key'] == titl]['profiles_ext'].to_numpy()
-        profs = df[df['plot_key'] == titl]['profs_flipped'].to_numpy()
+        profs = df[df['plot_key'] == titl]['profiles'].to_numpy()
+        dists = df[df['plot_key'] == titl]['distance'].to_numpy()
+        
+        for i in range(len(profs)):
+            profs[i] = np.flip(profs[i])
+        for i in range(len(dists)):
+            dists[i] = np.flip(dists[i])
+        
+        # profs = df[df['plot_key'] == titl]['profs_flipped'].to_numpy()
+        for dist, prof in zip(dists, profs):
+            ax.plot(dist, prof, c=color, alpha=0.2)
 
-        avg = np.mean(profs, axis=0)
-        X = np.arange(0, avg.size)
-        std_dev = np.std(profs, axis=0)
-        upper_err = avg + std_dev
-        lower_err = avg - std_dev
-        plt.plot(X, avg, c=color)
-        plt.title('Radial Profile Plot \n' + Path(detection_file).stem, fontsize=8)
-        # plt.suptitle()
-        plt.xlabel('Distance from cell center')
+        # avg = np.mean(profs, axis=0)
+        # X = np.arange(0, avg.size)
+        # std_dev = np.std(profs, axis=0)
+        # upper_err = avg + std_dev
+        # lower_err = avg - std_dev
+        # plt.plot(X, avg, c=color)
+        # plt.title('Radial Profile Plot \n' + Path(detection_file).stem, fontsize=8)
+        # # plt.suptitle()
+        plt.xlabel('Distance from cell boundary')
         plt.ylabel('Intensity')
-        # plt.errorbar(X, avg, std_dev, c=color)
-        plt.fill_between(X, upper_err, lower_err, color=color, alpha=0.1)
-        img_fname = Path('/Users/tim/Desktop') / (Path(detection_file).stem + '_plot.png')
-        plt.savefig(img_fname)
+        # # plt.errorbar(X, avg, std_dev, c=color)
+        # plt.fill_between(X, upper_err, lower_err, color=color, alpha=0.1)
+    # img_fname = Path('/Users/tim/Desktop') / (Path(detection_file).stem + '_plot.png')
+    # plt.savefig(img_fname)
 
     plt.show()
